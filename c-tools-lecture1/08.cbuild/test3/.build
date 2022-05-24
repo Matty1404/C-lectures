@@ -1,0 +1,3 @@
+CFLAGS  =       -Wall -I$(INCDIR)
+LDLIBS  =       -L$(LIBDIR) -lintlist
+BUILD   =       avgwordlen

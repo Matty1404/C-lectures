@@ -1,0 +1,20 @@
+# cb .build definitions
+
+# what to build
+BUILD   =       avgwordlen
+
+# the following settings apply only to this directory
+
+# automatically include lib in compilations, cleans etc,
+SUBDIR	=	lib
+
+# add a link dependency to lib/libintlist.a
+SUBLIB	=	lib/libintlist.a
+
+# add a compilation dependency to lib/intlist.h
+SUBINC	=	lib/intlist.h
+
+# add lib to #include search path (-Ilib) and to linker path
+# (-Llib) and look for the intlist library (-lintlist)
+EXTRA_CFLAGS	=	-Ilib
+EXTRA_LDLIBS	=       -Llib -lintlist

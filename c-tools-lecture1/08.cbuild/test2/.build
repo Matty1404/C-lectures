@@ -1,0 +1,12 @@
+# Declarations for cbuild
+
+# Library LIB will be built from LIBOBJS
+LIB     =       libintlist.a
+LIBOBJS =	intlist.o
+
+# what to build
+BUILD   =       testlist $(LIB)
+
+# installations to perform (each mode, source, destination)
+INST1	=	644 $(LIB) $(LIBDIR)
+INST2	=	644 intlist.h $(INCDIR)

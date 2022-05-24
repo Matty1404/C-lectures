@@ -1,0 +1,25 @@
+- In this version of the intlist + avgwrdlen example, the
+  list-of-integers module (intlist.c and intlist.h) and
+  it's test program (testlist.c) have been moved into the lib
+  directory and made into a library - with it's own cbuild .build
+
+- the .build file in the lib directory tells cbuild to make two things:
+  	- the executable testlist for us to test that intlist works
+	  (note that the executable is generated in lib, i.e. run lib/testlist)
+	- the library libintlist.a containing intlist.o
+
+- all that remains in this top level directory is the real main
+  program (avgwordlen.c), a set of shared definitions in defns.h,
+  and a cbuild .build file that tells the C compiler to search for includes
+  in the lib directory (-Ilib in CFLAGS), and to search for libraries
+  in the lib directory (-Llib in LDLIBS), to link libintlist.a in
+  (-lintlist also in LDLIBS), and that "lib" is a subdirectory that should
+  be built too (first).
+
+- SUBDIR = subdirs is a new feature in cbuild, implemented very crudely,
+  that forces 'cb' to cd into each subdir and run itself there.
+
+- so, to build, as before, type 'cb' and you'll notice it first cd into
+  lib and run cb there - compiling intlist.c, testintlist.c, linking
+  them together and then creating libintlist.a via ar.  Then, back in
+  this directory, it analyses all the source code and compiles it.

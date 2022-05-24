@@ -1,0 +1,7 @@
+- here, we have a copy of the fully separated list-of-integers module
+  (intlist.c and intlist.h) and it's test program (testlist.c) from
+  lecture 1.
+
+- The .build file for cbuild knows how to build, and install:
+  	- the executable testlist for us to test that intlist works
+	- the library libintlist.a containing intlist.o, using ar.

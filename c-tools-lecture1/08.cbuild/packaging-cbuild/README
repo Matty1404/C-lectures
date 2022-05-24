@@ -1,0 +1,4 @@
+See pkg-cbuild for an example cpanm + Par::Packer based
+"standalone packaging" of cbuild.. this works producing
+packagedcbuild.
+			Duncan White, Oct 2021

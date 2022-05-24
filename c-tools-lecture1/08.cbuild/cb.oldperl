@@ -1,0 +1,383 @@
+#!/usr/bin/perl
+#
+#	cbuild, aka cb: a new idea of mine (April 2020): based on my earlier
+#	Perl mfbuild (Makefile builder), this analyses C source files in a
+#	single directory, looking for normal modular C code, but INSTEAD OF
+#	writing a Makefile: let's **be make as well**
+#	i.e. after analysing the dependencies live, and building internal
+#	make-style rules to tell what to compile, **do those actions now**.
+#
+#	- first it identifies all .c files in the current directory, finds out
+#	  which contain main() functions, and determines which local .h files
+# 	  each .c file includes, then assuming that if fred.h is included, and
+#	  fred.c also exists in the current directory, then they must form a
+#	  single 2-part module called fred - hence:
+#		1. fred.c should be analysed to find which local .h files it includes, and
+#		2. fred.o will need to be linked with the main program
+#
+#	- note that it DOESN'T look for nested includes, because I hate
+#	  nested includes:)
+#	
+#	- then when it has determined the rules, it "behaves like Make",
+#	  with a few nice additions, trying to perform the minimum number
+#	  of actions to bring the build targets up to date
+#
+#	- you can put a few simple variable declarations into a ".build" file which
+#	  can assist cb in it's operation, let you specify the main programs to build,
+#	  let's you define that a library should be built, let's you specify what to
+#	  install where, and so on.
+#
+#	Written by Duncan C. White; April 2020, obviously trying to
+#	find things to do during the first Coronavirus lockdown:-)
+#
+
+use strict;
+use warnings;
+use feature 'say';
+use Data::Dumper;
+use Cwd;
+use Getopt::Long;
+use FindBin qw($Bin);
+
+use lib "$Bin";
+use Rules;
+
+
+# special commands that cb interpretes itself..
+my %special = map { $_ => 1 } qw(clean allclean install test);
+
+my %extra_rules;
+my @extratargets;
+
+my $debug = 0;
+my $showrules = 0;
+my $dryrun = 0;
+my $ok = GetOptions(
+	"rules" => \$showrules,
+	"n"     => \$dryrun,
+	"debug" => \$debug );
+die "Usage: cb [--rules] [-n] [--debug] [clean|allclean|install|test|a build target]\n"
+	unless $ok && @ARGV<=1;
+$showrules=1 if $debug;
+
+my $arg;
+$arg = shift if @ARGV==1;
+
+
+#
+# my $mtime = mtime($filename);
+#	Return the modification time of $filename.
+#
+sub mtime
+{
+	my( $filename ) = @_;
+	my @x = stat($filename);
+	return $x[9];
+}
+
+
+#
+# my $exitstatus = action($a,$doit);
+#	Display the action $a, then, if the global $dryrun is false
+#	(or $doit is true), run the action, report error if the exit status
+#	is non-zero, and return the exit status: 0 for ok, non-zero for failure.
+#
+sub action
+{
+	my( $a, $doit ) = @_;
+	$doit //= 0;
+	say "$a";
+	return 0 if $dryrun && ! $doit;
+	my $status = system($a);
+	unless( $status==0 )
+	{
+		warn "Action failed with exit status $status\n";
+	}
+	return $status;
+}
+
+
+my %rules;	# the Makefile-style rules will be stored here
+		# (because, of course, build() needs to use them)
+
+
+#
+# my $ts = build($t);
+#	Surprisingly simple Make-style algorithm: build target $t,
+#	first build each source recursively, then work out
+#	whether the rule's action must fire.  If the global $dryrun
+#	is true, don't actually run the rules. Return the timestamp
+#	(Unix-epoch format) of the target $t afterwards, or -1 to
+#	indicate that the target can't be built (compilation error etc),
+#	or the current time in $dryrun mode.
+#
+sub build
+{
+	my( $t ) = @_;
+	my $tts = ( -e $t ) ? mtime($t) : 0;	# target timestamp on entry
+	return $tts unless defined $rules{$t};
+	my( $t2, $sl, $a ) = @{$rules{$t}};
+	say "debug: build: t=$t, sl=", join(',',@$sl), ", a=$a" if $debug;
+	# build the sources first
+	my $neweststs = 0;		# timestamp of newest source file
+	foreach my $source (@$sl)
+	{
+		say "debug: building $source" if $debug;
+		my $ts = build($source);
+		say "debug: after building $source, ts=$ts" if $debug;
+		return -1 if $ts == -1;
+		$neweststs = $ts if $ts>$neweststs;
+	}
+	say "debug: target t=$t, tts=$tts, newest sts=$neweststs" if $debug;
+	if( $tts < $neweststs )
+	{
+		say "debug: action $a needed" if $debug;
+		return -1 unless action($a)==0;
+		$tts = ( -e $t ) ? mtime($t) : 0;	# regenerate
+		$tts = time() if $dryrun;		# fake timestamp in dryrun
+	}
+	return $tts;
+}
+
+
+my %defs;
+my @build;
+my @analyze;
+
+
+#
+# my $status = sub_builds();
+#	Handle "SUBDIR" builds, if any.
+#	Return 0 if all ok (or no SUBDIR), or a non-zero exit
+#	status if any of the sub builds failed.
+#
+sub sub_builds
+{
+	return 0 unless defined $defs{SUBDIR};
+	foreach my $subdir (split(/\s+/, $defs{SUBDIR}))
+	{
+		next unless -d $subdir;
+		my $cmd = "cb";
+		$cmd .= " -n" if $dryrun;
+		$cmd .= " --rules" if $showrules;
+		$cmd .= " --debug" if $debug;
+		$cmd .= " $arg" if defined $arg && $special{$arg};
+		say "debug: Running $cmd in subdir $subdir" if $debug;
+		my $thisdir = getcwd();
+		unless( chdir( $subdir ) )
+		{
+			warn "cb: can't cd into $subdir from $thisdir..\n";
+		} else
+		{
+			say "[Entering $thisdir/$subdir]";
+			my $status = action( $cmd, 1 );
+			say "[Leaving $thisdir/$subdir]";
+			chdir( $thisdir ) ||
+				die "cb: can't cd BACK into $thisdir".
+				    "from $thisdir/$subdir\n";
+			return $status if $status != 0;
+		}
+	}
+	return 0;
+}
+
+
+#
+# my $status = normal_build();
+#	Build everything normal; return 0 for ok, non-zero for failure.
+#
+sub normal_build
+{
+	foreach my $a (@analyze)
+	{
+		my $ts = build($a);
+		return $ts if $ts==-1;
+	}
+	return 0;
+}
+
+
+#
+# runrules( @build );
+#	Now run the rules..  treating clean/allclean/install/test specially.
+#	if global $dryrun is true, show the rules, don't run them
+#
+sub runrules
+{
+	my( @build ) = @_;
+	foreach my $b (@build)
+	{
+		say "trying to build $b"; # if $debug;
+		if( $b eq "clean" || $b eq "allclean" )
+		{
+			# Synthesize a magic clean rule..
+			my @t = sort keys %rules;
+			push @t, @extratargets;
+			my $cleanstr = join(' ', @t );
+			my $action = "/bin/rm -f $cleanstr core a.out .nfs*";
+			action($action);
+
+			if( $b eq "allclean" )
+			{
+				foreach my $a (@analyze)
+				{
+					my $ts = build($a);
+					return if $ts==-1;
+				}
+			}
+		}
+		elsif( $b eq "install" )
+		{
+			return unless normal_build()==0;
+
+			# look for INSTn definitions and run them
+			for( my $n=1; defined $defs{"INST$n"}; $n++ )
+			{
+				my $action = $defs{"INST$n"};
+				$action = "-m $action" unless $action =~ /^-m/;
+				$action = "install $action";
+				return unless action($action)==0;
+			}
+			warn "cb: no INST1 definition for 'cb install'\n"
+				unless defined $defs{INST1};
+		}
+		elsif( $b eq "test" )
+		{
+			return unless normal_build()==0;
+
+			# look for TESTn definitions and run them
+			warn "cb: no TEST1 definition for 'cb test'\n"
+				unless defined $defs{TEST1};
+			for( my $n=1; defined $defs{"TEST$n"}; $n++ )
+			{
+				my $action = $defs{"TEST$n"};
+				return unless action($action)==0;
+			}
+		}
+		else
+		{
+			my $ts = build($b);
+			return if $ts==-1;
+		}
+	}
+}
+
+
+# first, load definitions from any library/per-user/per-project/this-dir files
+%defs = read_all_defs();
+
+
+#
+# write_build( $b );
+#	Create/append .build file containing BUILD = $b.
+#
+sub write_build
+{
+	my( $b ) = @_;
+	open( my $fh, '>>', ".build" ) || die "write_build: can't create/append .build\n";
+	print $fh "BUILD = $b\n";
+	close( $fh );
+}
+
+
+#
+# my %extrarules = extra_rules();
+#	Read extra rules from the .build data, building a rules-format
+#	%extrarules, with each rule in the target -> (target/sources/action)
+#	form.
+#
+sub extra_rules
+{
+	# look for RULEn definitions and run them
+	return () unless defined $defs{RULE1};
+
+	my %result;
+	for( my $n=1; defined $defs{"RULE$n"}; $n++ )
+	{
+		my $rule = $defs{"RULE$n"};
+		my( $targets, $sources, $action ) = split( /!/, $rule );
+		say "extra rule target=$targets, sources=$sources, action=$action" if $debug;
+		my @t = split( /\s+/, $targets );
+		my @s = split( /\s+/, $sources );
+		$result{$_} = [ $_, \@s, $action ] for @t;
+	}
+	return %result;
+}
+
+
+
+# new code: if no defs{BUILD} go look for main() in *.c and create/
+# append BUILD = those_files_w_o_.c to .build for next time
+unless( $defs{BUILD} )
+{
+	my @b = find_all_main_programs();
+	die "cb: no main() functions in *.c found. BUILD not set\n" unless @b;
+	my $b = join(' ', @b );
+	write_build( $b );
+	$defs{BUILD} = $b;
+}
+
+die "LOGIC ERROR: impossible, can't happen: no BUILD definition\n"
+	unless $defs{BUILD};
+
+my $build = expand_macros( $arg // $defs{BUILD} );
+
+# handle subdirectories, sublibs and subincs
+
+# SUBLIB: list of all sublibs (libraries in subdirs)
+# to add to link dependencies
+my @sublibs = split(/\s+/, $defs{SUBLIB} // '' );
+say "debug: sublibs=", join(',',@sublibs) if $debug;
+
+# SUBINC: list of all subincs (include files in subdirs)
+# to add to compilation deps
+my @subincs = split(/\s+/, $defs{SUBINC} // '' );
+say "debug: subincs=", join(',',@subincs) if $debug;
+
+exit 0 if sub_builds() != 0;
+
+say "debug: build=$build after sub_builds" if $debug;
+
+@build = split(/\s+/, $build );
+@analyze = @build;
+
+# if special: analyse what we WOULD build
+if( $special{$build} )
+{
+	die "cb $build: no BUILD definition given" unless $defs{BUILD};
+	@analyze = split(/\s+/, $defs{BUILD} );
+}
+
+%extra_rules = %rules = extra_rules();
+@extratargets = sort keys %rules;
+
+foreach my $target (@extratargets)
+{
+	my $ts = build($target);
+	warn "building extra rule $target failed, statis $ts\n" if $ts==-1;
+}
+
+find_all_includes();
+
+say "about to build ", join(' ',@build) if $debug;
+say "need to analyse ", join(' ',@analyze) if $debug;
+
+%rules = make_all_rules( \@subincs, \@sublibs, @analyze );
+
+if( $showrules )
+{
+	say "rules are:";
+	say "";
+	foreach my $ref (\%extra_rules, \%rules)
+	{
+		foreach my $rule (sort keys %$ref)
+		{
+			my $rule = $ref->{$rule};
+			my ( $target, $srcs, $action ) = @$rule;
+			my $srcstr = join(' ', @$srcs);
+			say "$target:\t$srcstr\n\t$action\n";
+		}
+	}
+}
+
+runrules( @build );

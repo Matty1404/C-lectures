@@ -1,0 +1,21 @@
+# destination: home dir..
+# DEST		=	$(HOME)
+# or can install into TOOLDIR (env var, eg ~/c-tools)
+DEST		=	$(TOOLDIR)
+
+LIBDIR		=	$(DEST)/lib/$(ARCH)
+INCDIR		=	$(DEST)/include
+
+EXTRA_CFLAGS	=       -I$(INCDIR)
+EXTRA_LDLIBS	=       -L$(LIBDIR)
+
+LIB		=	libhst.a
+LIBOBJS		=	hash.o set.o testutils.o
+TESTS		=	testhash testset
+
+BUILD		=	$(TESTS) $(LIB)
+
+TEST1		=	summarisetests --max 10 $(TESTS)
+
+#INST1		=	644 $(LIB) $(LIBDIR)
+#INST2		=	644 *.h $(INCDIR)

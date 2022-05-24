@@ -1,0 +1,43 @@
+- here we have a new idea of mine (2020): analyse C source files like mfbuild
+  does, but DON'T write a Makefile: "be make" as well, i.e. analyse the
+  dependencies live, build internal make-style rules, and run them.
+
+- first it identifies all .c files in the current directory,
+  determines which local .h files each .c file includes,
+  assuming that if fred.h is included, and fred.c also exists, then they
+  form a single 2-part module called fred [hence fred.c should be analysed
+  for which local .h files it includes, and so on, and fred.o will need to
+  be linked with the main program, and so on.
+
+- let's call it <<cbuild>> or, in abbreviated form, <<cb>>
+
+- note that cb does NOT look in .h files for NESTED #includes, because I
+  think nested includes are evil.  If you like nested includes (and all the
+  associated paraphernalia such as include guards), feel free to
+  add code to support that to cb.  I'm not doing it.
+
+
+Installation notes:
+
+- cb (and it's helper module Rules.pm) is written using Modern Perl's
+  experimental subroutine signatures.  "make install" will install them
+  (and a man page) into your C-Tools directory.  If you have difficulty
+  running this code because you're using a version of Perl older than Perl 5.22,
+  please proceed as follows:
+
+     cd 08.cbuild
+     mv cb cb.newperl
+     cp cb.oldperl cb
+     mv Rules.pm Rules.pm.newperl
+     cp Rules.pm.oldperl Rules.pm
+     make install
+
+- EXPERIMENTAL: As yet another option, I've added a binary packaged version of
+  cb (an ELF executable that includes the Perl interpreter, cb and Rules.pm all
+  bundled together using the "Perl packer" tool pp), you'll find this in the
+  packaging-cbuild directory.  You could use choose to install that version by:
+
+     cd 08.cbuild
+     mv cb cb.newperl
+     cp packaging-cbuild/packedcb cb
+     make install

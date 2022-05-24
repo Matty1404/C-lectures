@@ -1,0 +1,529 @@
+.nr X
+.TH cb 1 "28 Apr 2020"
+.SH NAME
+cb \- compile and link one or more simple C programs and associated modules
+.SH SYNOPSIS
+.B cb
+.I program_name+
+OR
+.LP
+.B cb [-n] [--rules] [--debug] [clean|allclean|install|test]
+
+.SH DESCRIPTION
+Given the name of one or more main programs we'd like to build from their
+corresponding source files, either specified on the command line or (more
+typically) defined in the BUILD = list_of_programs line in your .build file,
+.B cb
+analyses all the .c files in the current directory,
+builds a series of make-style rules for compiling and linking the
+appropriate pieces, and runs them - all without you having to write a Makefile.
+
+However,
+.B cb
+is largely driven by simple declarative definitions in a
+.B .build
+file (either in the current directory, or an ancestral directory,
+or a standard per-user directory, or a system directory).
+Note that you don't normally need to put any make-style
+rules in any
+.B .build
+files.
+
+.SH FLAGS
+.TP 10
+.B "-n"
+Dryrun mode. Print commands that would run (just like Make's -n option,
+this is an approximation based on faking timestamps, it's not always
+perfect but works pretty well).
+
+.TP 10
+.B "--rules"
+Show the rules (as well as performing them, unless used in combination with -n).
+Produce Makefile-style rules, which could be useful to debug what
+.B cb 
+is doing, or to produce a Makefile if you insist on having one.
+
+.TP 10
+.B "--debug"
+Enter debugging mode, this prints lots of messages, some of them not very high quality.
+These messages are intended only to help me debug
+.B cb,
+you probably shouldn't rely on them.
+
+
+.SH MORE DETAILED DESCRIPTION
+
+.LP
+.B cb
+operates by searching all C source files in the current directory for
+#include "Y.h" lines, then attempts to locate corresponding
+.B "Y.c"
+files and analyse them in turn,
+building a series of compilation rules (one per .c source file), and a
+series of linking rules (one per buildable program),
+and then applying those rules in a very Make-like fashion,
+stopping immediately if any fail (return a non-zero exit status).
+
+.LP
+The critical assumption that
+.B cb
+make is that if X.c includes Y.h and there is also a file called Y.c,
+this is not a coincidence - X.h and X.c form a conventional two-part C module.
+(In fact, in that scenario, Y.c should also #include Y.h,
+in order to allow the C compiler to check that the implementation (Y.c) is compatible
+with the definitions and declarations in the interface (Y.h).)
+
+The other assumption
+.B cb
+makes is that .h files
+.B "DO NOT"
+include other .h files - so it does not check .h files for #include lines.
+I firmly believe that it is
+.B "bad practice to include X.h in Y.h",
+so I'm not supporting it.
+A technical reason for not supporting it is that allowing Y.h to include X.h
+could allow a careless programmer to set up an include loop
+(X.h includes Y.h which includes Z.h which includes X.h),
+and thus we'd have to add loop-detection code into
+.B cb
+if we supported this.
+As it stands, if .c files only include .h files, no loops are possible (unless
+one plays with symlinks - but if you do that then you deserve to make
+.B cb
+loop).
+But really - that's an excuse.  I don't like nested includes, so I'm not writing code
+to support them!
+
+.LP
+.B cb
+starts by searching for, reading and merging, definitions from all the following files:
+.B /etc/cbuilddefs,
+.B $HOME/include/cbuilddefs
+.B $HOME/c-tools/lib
+.B ../../.build
+.B ../.build
+and
+.B .build
+(in such a way that "ancestral" definitions are overridden by "child" definitions).
+
+.SH FILES
+.TP 20
+.B .build
+(in the current directory) - per-project definitions incorporated into
+the top of the Makefile.  Although
+.B cb
+can just about function without a
+.B .build
+file (as long as you always name an executable to build on the
+command line), I recommend always having, at least, a minimal
+.B .build
+file, such as:
+.nf
+# cb definitions
+CC      =       gcc
+CFLAGS  =       -Wall
+BUILD   =       program1 program2 program3...
+.fi
+where CC and CFLAGS should be obvious to any Make user, and
+.B BUILD
+lists which executables
+.B cb
+should build by default.  At some point in the future,
+.B cb
+may start warning if there is no
+.B .build
+file in the current directory!
+
+.SH ADVANCED FEATURES
+.B cb
+automatically has the ability to
+.B clean
+and
+.B allclean
+(clean and then build everything),
+without you needing to specify what should be cleaned.
+What does it clean?  Every rule's target, because that is generated
+from other things (it's sources) so is trivially regeneratable.
+
+.B cb
+also has the ability to build (statically linked) libraries,
+if you add definitions to your .build such as:
+.nf
+# Library LIB will be built from LIBOBJS
+LIB     =       libintlist.a
+LIBOBJS =	intlist.o
+
+# what to build
+BUILD   =       testlist $(LIB)
+.fi
+
+then
+.B cb,
+after building the library object files (here
+.B intlist.o
+), will run that standard "build me a library" command:
+
+.nf
+ar rcs libintlist.a intlist.o
+.fi
+
+.B cb
+also has the ability to run whatever test commands you like
+(by invoking
+.B cb test
+) by adding definitions to your .build file like:
+.nf
+# test commands for "cb test" to run
+TEST1	=	echo hi
+.fi
+
+Here, the definition names must be TEST1, TEST2...; cb stops looking
+as soon as one TESTi is missing.  Each TEST1 definition is a
+Unix command to run.  "cb test" will, after normal compilation and linking
+and library building, run these commands exactly as given.  You may wish
+to invoke some test summarising script to give a nice report of how many
+tests succeed and fail, but that's your business entirely.
+
+.B cb
+also has the ability to install whatever you like (by invoking
+.B cb install
+) by adding definitions to your .build file like:
+.nf
+# installations to perform (each mode, file, directory)
+INST1	=	644 $(LIB) $(LIBDIR)
+INST2	=	644 intlist.h $(INCDIR)
+.fi
+
+Here, the definition names must be INST1, INST2...; cb stops looking
+as soon as one INSTi is missing.  Each INST1 definition is basically
+a Unix install command without the word "install".  That's added so
+that "cb install" will, after normal compilation and linking and library
+building, only run install commands.
+
+.SH "Multi-Directory Builds"
+
+.B cb
+has some useful but simplistic support for handling multi-directory builds.
+To support this, there are new definitions
+.B SUBDIR,
+.B SUBLIB,
+.B SUBINC,
+.B EXTRA_CFLAGS
+and
+.B EXTRA_LDLIBS.
+
+Let's examine an example in detail to understand what
+.B cb
+can do, and how these new definitions interact.
+
+Suppose our top level directory contains one or more C program files,
+and zero or more accompanying C modules (pairs of .c and .h files),
+along with zero or more unaccompanied .h files,
+but that you also have a subdirectory (imaginatively called
+.B lib
+) that contains some additional (self-contained C code) that, when compiled,
+will build a single deliverable
+.B library
+(which the programs in the top level directory will then need to link against).
+
+Note that each directory (both the top-level and the lib subdirectory) need to
+have it's own
+.B build
+file.  I did consider some form of single
+.B build
+file for multiple directories, but couldn't come up with a nice syntax without
+unnecessary complexity.
+
+First of, to tell
+.B cb
+in the top-level directory
+that there's a subdirectory called
+.B lib
+that it should attempt to build
+(before the targets in the top-level directory itself),
+the top-level directory's
+.B .build
+file should contain a definition like:
+.nf
+SUBDIR	=	lib
+.fi
+
+This, alone, will cause
+.B cb
+to automatically run
+.B "cd lib; cb"
+before doing it's own actions.
+Note that you can have more than one subdirectory named in SUBDIR, as in:
+.nf
+SUBDIR	=	lib1 lib2 lib3
+.fi
+in which case
+.B cb
+will sequence through the named subdirectories,
+entering and building everything in
+.B lib1
+first, then entering and building everything in
+.B lib2
+second, etc.
+Only after building all the materials in all 3 library directories,
+will
+.B cb
+decide which actions it needs to run in the top-level directory.
+
+This
+.I "run in subdirectories"
+behaviour is likely to be especially useful for standard commands such as:
+.B cb,
+.B cb clean
+and
+.B cb allclean,
+because they are all applicable at all levels.  Currently,
+.B cb
+has a static list of which command-line build targets to pass on into sub-directory builds,
+and when to run
+.B cb
+with no arguments in subdirectories.
+
+Turning to the
+.B lib
+subdirectory now,
+let's assume that
+.B lib
+contains an
+.I "list of integers"
+module (i.e. a pair of files:
+.B intlist.c
+and
+.B intlist.h
+) and a unit test program to test the intlist module.
+Let's also assume that we wish to build a library
+.B libintlist.a
+from
+.B intlist.c.
+
+To do say, the lib directory's
+.B .build
+file should say:
+
+.nf
+# Library LIB will be built from LIBOBJS
+LIB     =       libintlist.a
+LIBOBJS =       intlist.o
+
+# what to build
+BUILD   =       testlist $(LIB)
+.fi
+
+(exactly as we discussed above when discussing
+.B LIB
+and
+.B LIBOBJS).
+
+So now, in the top-level directory, if we run:
+
+.nf
+cb
+.fi
+
+It will first enter
+.B lib
+and run
+.B cb
+there, building the library
+.B libintlist.a
+and the test program
+.B testlist,
+and will then return to the top-level directory, and run whichever actions it's own
+dependency rules deem necessary.
+
+What's our next step?
+We said that the code in the top-level directory would need to be linked against
+the libintlist.a library in the lib subdirectory.  To do that,
+we need to alter the top-level directory's 
+.B .build
+file to manipulate CFLAGS and LDLIBS to
+cause the C compiler to search the lib directory both for include files and libraries,
+and name the library that the lib directory contains.  We achieve this by adding:
+
+.nf
+EXTRA_CFLAGS	=	-Ilib
+EXTRA_LDLIBS	=       -Llib -lintlist
+.fi
+
+to the top-level directory's
+.B .build
+file.
+
+.B EXTRA_CFLAGS
+and
+.B EXTRA_LDLIBS
+add extra text to the standard CFLAGS and LDLIBS definitions.
+This gives an effective CFLAGS of
+.nf
+-Wall -Ilib
+.fi
+and LDLIBS of
+.nf
+-Llib -lintlist
+.fi
+
+Note that all
+.B SUB* and
+.B EXTRA*
+definitions only affect the directory they are in,
+they are
+.B "not inherited"
+into subdirectories.  This means that when
+.B cb
+starts by entering the
+.B lib
+subdirectory and compiling the intlist.c and testlist.c source files,
+it will do so with no SUBLIBs, and the minimal
+.nf
+CFLAGS	=	-Wall
+LDLIBS	=
+.fi
+definitions.
+Before I added EXTRA_CFLAGS and EXTRA_LDLIBS, the
+top-level .build file had to set:
+.nf
+CFLAGS	=	-Wall -Ilib
+LDLIBS	=	-Llib -lintlist
+.fi
+and the lib subdirectory's .build file had to reset them:
+.nf
+CFLAGS	=	-Wall
+LDLIBS	=	
+.fi
+
+EXTRA_CLAGS and EXTRA_LDLIBS were added to remove this nastiness.
+
+
+One wrinkle remains.  Although setting
+.B SUBDIR
+causes
+.B cb
+enters the subdirectory and re-invoke itself,
+when it returns to the current directory and runs it's dependency
+checks, it won't realise that things in the subdirectory have changed.
+This means that, if the library
+.B libintlist.a
+is rebuilt (because intlist.c is recompiled) in the lib subdirectory,
+.B cb
+will fail to relink all programs in the top-level directory against the
+new version of
+.B libintlist.a.
+Similarly, if
+.B intlist.h
+has changed in lib, it will fail to recompile C source files in the top-level directory
+that include intlist.h.
+
+To fix that, I added two more definitions, as well as setting SUBDIR
+(in the top-level directory's
+.B .build
+file), you can specify "sub library files" and "sub include files" that will
+be used as additional dependencies to linking and compilation respectively.  Eg:
+
+.nf
+SUBLIB	=	lib/libintlist.a
+SUBINC	=	lib/intlist.h
+.fi
+
+This automatically includes lib in compilations, cleans etc,
+as before,
+but also adds a link dependency to lib/libintlist.a into all program
+link rules, and a compilation dependency to lib/intlist.h into all
+compilations (whether or not they include intlist.h).
+
+You may think of this as naming
+.I "the deliverables from the lib subdirectory".
+
+With this final tweak in place, running
+.B cb
+in the top-level directory
+goes inside the
+.B lib
+subdirectory first and reinvokes
+.B cb
+(rebuilding, if necessary, the
+.B libintlist.a
+library), and then
+back in the top-level directory,
+.B cb
+recompiles whatever C source files need recompilation because on
+within-directory timestamp changes, and then
+relinks all C programs if any of the within-directory object files
+have changed, or
+.I "if lib/libintlist.a has been rebuilt".
+
+You can see the complete two-directory example this discussion was based on,
+in the test4 example directory in the
+.B cb
+source directory.
+
+In particular, observe how test4/.build says:
+
+.nf
+# automatically include lib in compilations, cleans etc,
+# and add a link dependency to lib/libintlist.a in there
+# (ie. this is the deliverable from the lib subdirectory)
+SUBDIR	=	lib/libintlist.a
+
+# the following settings apply only to this directory
+EXTRA_CFLAGS	=	-Ilib
+EXTRA_LDLIBS	=       -Llib -lintlist
+.fi
+
+whereas test4/lib/.build makes no mention of them.  In earlier
+versions of cb, all settings were inherited and that caused
+considerable problems when cb ran itself in the lib directory.
+
+
+.SH "Extra Rules"
+
+Occasionally, you may need to add extra Make-style rules into your
+.B .build
+files.  Not for routine C compilation, linking or building libraries etc,
+but when you are using other tools (such as
+.B yacc, lex
+or
+my own
+.B datadec
+) which construct .c files (and/or .h files) automatically.
+
+.B cb
+has some useful but simplistic support for handling extra rules:
+
+In your
+.B .build
+file, you can add rules like:
+
+.nf
+RULE1 = parser.c!parser.y!yacc -vd parser.y
+.fi
+
+This causes
+.B cb
+to add a Make-style rule:
+
+.nf
+parser.c:	parser.y
+	yacc -vd parser.y
+.fi
+
+into it's internal rules, which are then applied to construct software.
+This will cause
+.B cb
+to run yacc to regenerate parser.c from parser.y if (as usual with Make)
+parser.c does not exist, or if it exists but is older than parser.y.
+
+RULEn declarations in your .build file (like TESTn and INSTn
+declarations) must be numbered numerically - RULE1, RULE2, RULE3... -
+.B cb
+will stop adding extra rules when it finds a missing RULEn.
+
+.PD
+.SH SEE ALSO
+.BR make (1)
+.BR mfbuild (1)
+.LP

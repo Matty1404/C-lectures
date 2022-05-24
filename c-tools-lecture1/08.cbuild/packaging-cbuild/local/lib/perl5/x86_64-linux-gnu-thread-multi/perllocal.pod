@@ -1,0 +1,88 @@
+=head2 Mon Oct 25 22:01:25 2021: C<Module> L<Cwd|Cwd>
+
+=over 4
+
+=item *
+
+C<installed into: /homes/dcw/docs/talks/c-tools-2021/L1/08.cbuild/packaging-cbuild/local/lib/perl5>
+
+=item *
+
+C<LINKTYPE: dynamic>
+
+=item *
+
+C<VERSION: 3.75>
+
+=item *
+
+C<EXE_FILES: >
+
+=back
+
+=head2 Mon Oct 25 22:01:28 2021: C<Module> L<Data::Dumper|Data::Dumper>
+
+=over 4
+
+=item *
+
+C<installed into: /homes/dcw/docs/talks/c-tools-2021/L1/08.cbuild/packaging-cbuild/local/lib/perl5>
+
+=item *
+
+C<LINKTYPE: dynamic>
+
+=item *
+
+C<VERSION: 2.183>
+
+=item *
+
+C<EXE_FILES: >
+
+=back
+
+=head2 Mon Oct 25 22:01:29 2021: C<Module> L<FindBin|FindBin>
+
+=over 4
+
+=item *
+
+C<installed into: /homes/dcw/docs/talks/c-tools-2021/L1/08.cbuild/packaging-cbuild/local/lib/perl5>
+
+=item *
+
+C<LINKTYPE: dynamic>
+
+=item *
+
+C<VERSION: 1.52>
+
+=item *
+
+C<EXE_FILES: >
+
+=back
+
+=head2 Mon Oct 25 22:01:30 2021: C<Module> L<Getopt::Long|Getopt::Long>
+
+=over 4
+
+=item *
+
+C<installed into: /homes/dcw/docs/talks/c-tools-2021/L1/08.cbuild/packaging-cbuild/local/lib/perl5>
+
+=item *
+
+C<LINKTYPE: dynamic>
+
+=item *
+
+C<VERSION: 2.52>
+
+=item *
+
+C<EXE_FILES: >
+
+=back
+

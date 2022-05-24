@@ -1,0 +1,11 @@
+# cb .build definitions
+
+# Library LIB will be built from LIBOBJS
+LIB     =       libintlist.a
+LIBOBJS =	intlist.o
+
+# what to build
+BUILD   =       testlist $(LIB)
+
+# note that the parent's SUB* and EXTRA* settings
+# do not apply here.. they are not inherited

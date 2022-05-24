@@ -1,0 +1,23 @@
+# cb definitions
+
+# destination: home dir..
+# DEST		=	$(HOME)
+# or can install into TOOLDIR (env var, eg ~/c-tools)
+DEST		=	$(TOOLDIR)
+
+BINDIR		=	$(DEST)/bin
+LIBDIR		=	$(DEST)/lib/$(ARCH)
+INCDIR		=	$(DEST)/include
+
+CC		=	gcc
+CFLAGS		=	-Wall -g
+EXTRA_CFLAGS	=	-I. -I$(INCDIR) -Ilib
+EXTRA_LDLIBS	=	-L$(LIBDIR) -Llib -lhst
+BUILD		=	testfamcoll transform
+
+SUBDIR		=	lib
+SUBLIB		=	lib/libhst.a
+SUBINC		=	lib/hash.h lib/set.h lib/testutils.h
+
+TEST1		=	summarisetests --max 10 ./testfamcoll
+INST1		=	755 summarisetests $(BINDIR)

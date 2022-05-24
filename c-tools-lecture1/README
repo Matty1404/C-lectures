@@ -1,0 +1,101 @@
+C Programming Tools Lecture 1 Materials
+
+PREPARATION
+
+- Edit your ~/.bashrc and add the following stanza at the bottom:
+
+# C Tools lecture support
+if [ "$ARCH" == '' ]
+then
+  ARCH=`arch`
+fi
+export TOOLDIR=$HOME/c-tools
+export PATH="$TOOLDIR/bin:$TOOLDIR/bin/$ARCH:$PATH"
+if [ "$MANPATH" == '' ]
+then
+  export MANPATH=$TOOLDIR/man
+else
+  export MANPATH=${MANPATH}:$TOOLDIR/man
+fi
+
+- then run your .bashrc by: ". ~/.bashrc"
+
+[btw, I have tried to make sure that the above command sequence will work
+on any Linux machine, and probably any Mac too.  But if you run into
+difficulties: try ssh'ing in to a DoC linux shell server and then into a
+randomly chosen lab machine, and work there, perhaps asking a question on
+EdStem about how to solve whatever problem you encountered].
+
+- prove that you have the TOOLDIR variable set up by: echo $TOOLDIR
+
+- then:
+
+	make mkdir
+
+- see what that has created by:
+	find ~/c-tools
+
+Then sequence through the following directories, exploring each
+directory, and following the instructions in each directory's README.
+
+- 01.intlist
+	- this is the make example
+	- details in 01.intlist's README,
+	  explore it as much as you like.
+
+- 02.c-mfbuild
+	- for those interested, here's my first attempt at building
+	  a tool to build Makefiles for simple C projects, written
+	  in C, dating to the late 1990s, called mfbuild.
+
+- 03.perl-mfbuild
+	- for those interested, here's my second attempt at building
+	  a tool to build Makefiles for simple C projects,
+	  dating to 2016, written in Perl this time, also called mfbuild.
+	- I recommend that you choose this one, go into this directory and
+	  type "make install" to give yourself an "mfbuild" command.
+
+- 04.intlist-with-lib
+	- this is the 01.intlist example, split into a separate library
+	  directory called lib (containing the intlist module and it's
+	  test program), and the top level directory (containing the
+	  avgwordlen main program and a Makefile to build the library,
+	  include it and link to it.
+
+- 05.libintlist
+	- here, the list-of-integers module (intlist.c and intlist.h) and
+	  it's test program (testlist.c) are entirely separated from
+	  applications (eg. the avgwordlen program) that USE intlists.
+	- now, the Makefile has a new "install" target, to install the library
+	  in the TOOLDIR/lib/ARCH directory, and intlist.h into TOOLDIR/include.
+	- once you've gone into this directory and run "make install", your
+	  TOOLDIR library permanently contains the intlist ADT, for us to
+	  reuse in other apps whenever we like.
+
+- 06.avgwordlen-only
+	- this contains the real application program (avgwordlen.c) that uses
+	  intlists from the TOOLDIR library, and a Makefile that tells the C
+	  compiler to look in the library both for includes and libraries,
+	  and specifically to link in -lintlist.
+	- together, 05.libintlist and 06.avgwordlen-only show how to do full
+	  separation: your TOOLDIR library permanently contains the intlist
+	  ADT, for us to reuse in other apps whenever we like.
+
+- 07.intlist-with-cmake
+	- a version of 04.intlist-with-lib using CMake to generate the
+	  Makefiles for us.  The source code is IDENTICAL to
+	  04.intlist-with-lib, the Makefiles have been replaced with
+	  CMakeLists.txt files (and the README has been modified to
+	  explain it).
+
+- 08.cbuild
+	- here we have a new idea of mine (2020): analyse C source files like
+	  the Perl mfbuild does, but DON'T write a Makefile: instead, let's
+	  "be make" as well, i.e. analyse the dependencies live, build
+	  internal make-style rules, and then execute those rules just as
+	  Make would have done.  I'm rather proud of this tool, as it now
+	  has some support for multi-directory work (which of course make
+	  doesn't have).  New for 2021: I've added some support into cbuild
+	  for encoding non-standard rules that generate .c or .h files
+	  automatically - we'll see several examples of doing that later in
+	  these lectures.

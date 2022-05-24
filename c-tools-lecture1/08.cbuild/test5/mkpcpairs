@@ -1,0 +1,30 @@
+#!/usr/bin/perl
+#
+#	mkpcpairs: generate N "parent: child" pairs for testing transform.c,
+#		given a list of names as input.
+#		assume no restrictions on the relationships, i.e. each person
+#		can be parents and children (of any number of parents), i.e. 
+#		not a realistic basis for a family tree..
+#
+
+use strict;
+use warnings;
+
+my $n = shift // 1000;
+
+my @name;
+while( <> )
+{
+	chomp;
+	push @name, $_;
+}
+for(1..$n)
+{
+	my $p = $name[int(rand(@name))];
+	my $c;
+	do
+	{
+		$c = $name[int(rand(@name))];
+	} while( $p eq $c );
+	print "$p: $c\n";
+}

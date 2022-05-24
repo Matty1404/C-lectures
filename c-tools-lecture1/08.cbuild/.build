@@ -1,0 +1,9 @@
+# Declarations for cbuild
+CC	=	gcc
+CFLAGS	=	-g -Wall
+
+# destination: install into TOOLDIR (env var, eg ~/c-tools)
+DEST    =       $(TOOLDIR)
+INCDIR  =       $(DEST)/include
+LIBDIR  =       $(DEST)/lib/$(ARCH)
+
