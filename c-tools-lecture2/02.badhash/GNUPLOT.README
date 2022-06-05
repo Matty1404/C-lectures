@@ -1,0 +1,40 @@
+Using gnuplot to graph the results of timedtests
+
+- First run ./timedtests and wait a minute or so for all the
+  iterate tests to complete, first notice whether the Linux Out Of
+  Memory Process Killer (oom-killer) has killed any of the later
+  runs, by saying "Killed".  When I did it, the last two runs (36000
+  and 40000) were Killed.  Exclude any data points where iterate
+  was killed.
+
+- Copy paste all the output into your favourite Programmers Editor
+  and use it to turn (as quickly as possible - think of this as a challenge)
+  the output into a file called raw_data, in which each line is a "X Y"
+  point, where the X value is the number of iterations and the Y value
+  is the elapsed time taken, without the 0: minutes prefix.  As an
+  example, if the first iterate run in timedtests (time ./iterate 1000 0)
+  produces the output:
+
+    running 1000 iterations, then delay 0 seconds
+    0.338u 0.091s 0:00.43 97.6%	0+0k 0+0io 0pf+0w
+
+  Then the first data point in raw_data is
+
+    1000 00.43
+
+- Once raw_data contains all the (N,elapsed time) pairs from timedtests
+  runs THAT WEREN'T KILLED, examine the file "gnuplotcmds" which reads
+
+    set terminal postscript
+    set output "plot.ps"
+    plot "raw_data" using 1:2 title "Time vs #iterations" with linespoints
+
+- Plot the data generating "plot.ps" by saying:
+
+    gnuplot < gnuplotcmds
+
+- Now view the resultant graph by saying:
+
+    gv plot.ps
+
+- Go back to the main README file for discussion of the results..

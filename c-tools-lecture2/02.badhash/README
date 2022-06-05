@@ -1,0 +1,154 @@
+This is an example on how to detect memory leaks in a simple
+(but slightly buggy) hash table module.
+
+Put yourself in the following scenario:
+
+- this hash table module passes all it's tests, and has been used
+  successfully in several small projects, where each project created
+  a SMALL number of LONGLIVED hash tables.
+
+- but we are about to embed it into a much bigger system, that will
+  create, populate, copy and destroy hash tables thousands of times
+  per run.
+
+- the voice of bitter experience: let's test that just in case something
+  weird happens!
+
+- so we write a new test program <<iterate N M>> that performs all previous
+  tests repeatedly: N times, sleeping M seconds afterwards.
+
+- when M=0 the run-time should be linear with N.  Test it:
+
+- use time ./iterate N 0 for one data point
+
+- use the ./timedtests shell script to try several values of N
+
+- graph the results using gnuplot (or any similar plotting tool that you're
+  familiar with - btw, although I haven't focussed on plotting tools as a
+  category of tools for your toolbox in these lectures, it's undoubtedly
+  true that being able to quickly plot X-Y linecharts, or histograms, or
+  piecharts from numerical data is an invaluable aid to understanding your
+  code better).  See the file GNUPLOT.README to see what I did here to
+  generate plot.ps, which you can view via "gv plot.ps" to see that the
+  results are definitely non-linear at around N=30000.
+
+- When I did this (on Wed 25th May 2022, on my 16GB RAM PC called thud),
+  it showed linear behaviour for values of N up to 28000 and then showed
+  a definite non-linear slowdown for N=32000 and N=36000 (and N=40000 got Killed).
+  Note that a second run of timedtests had the N=36000 case getting Killed too,
+  so the OOMkiller's behaviour is clearly non-deterministic, and we're right on
+  the edge.
+
+- Note that on the SAME MACHINE (thud) this time last year (and thud has not
+  been upgraded or replaced), the OOMkiller killed off the N=24000 test run
+  reliably.  I don't really have an explanation of why the OOMkiller behaved
+  more aggressively last year than it is doing today, we (CSG) certainly haven't
+  deliberately tweaked the OOMkiller's configuration as far as I know:-)
+
+- Note further that a few years ago, on another machine with 16GB RAM running
+  Ubuntu linux, the behaviour was much worse, and showed what you might expect
+  if there was no OOMkiller enabled: we saw a much more prolonged "tail",
+  the whole machine becomes very slow after some cut-off point (possibly
+  a smaller value of N, eg 16000 or so), but iterate didn't get "Killed"
+  immediately.  That was worse, because you might have to wait a minute or
+  two until the machine returned to normal speed.
+
+- Of course, if you do this on your laptop, or home desktop PC, or Mac, the
+  behaviour may be radically different.  If there is no logical component
+  matching Linux's "OOMkiller", you might experience the "machine slows down
+  to treacle for several minutes" behaviour we used to see.
+
+- Ok, away from the details of when it slows down, and what happens when it
+  does, what on earth can be happening to CAUSE the slowdown?  After all,
+  iterate is just a for loop.  Why should LATER runs through that loop be
+  slower than EARLIER runs?
+
+- To find out what's going on, let's try monitoring with top, running it as
+  "top -o %MEM" to have it sort processes by memory used.
+
+- Run iterate with a 10s time delay:
+
+   time ./iterate 24000 10
+
+  while watching to see what top shows.
+
+- you'll see that:
+
+  - iterate's memory use grows continuously to over 70% of the
+    machine's physical memory.
+
+  - you may briefly see the iterate process go into "D" state, waiting
+    for I/O - but what I/O, iterate doesn't do any I/O? - the "time"
+    output may also show I/O and page faults.
+    
+  - The only possible explanation is that iterate is LEAKING memory as it
+    runs, causing it's memory use to grow continuously, and at some point
+    (with large enough N) it's memory use exceeds the total available,
+    and then parts of iterate's memory get SWAPPED OUT to disk.  Don't
+    we love virtual memory?
+
+
+Finding memory leaks
+====================
+
+- Ok, top showed us that iterate must be leaking memory; and lots of it!
+
+- Look for memory leaks with
+
+  valgrind ./iterate
+
+- valgrind confirms that some blocks are never freed, and suggests that
+  you run it again with more detail:
+
+  valgrind --leak-check=full ./iterate
+
+  do that.  aha.  now valgrind suggests 4 linenos in hash.c to go look,
+  where something was malloc()d but never free()d.  View those 4 lines in
+  your favourite editor, what was allocated?  in what function?
+  Were those elements ever freed?  Where should they have been freed?
+  What functions perform the freeing?  go look at those functions.
+  What might be happening?
+
+  (Broad Hint, read only if you get stuck.....  look at hashFree and
+  free_tree)
+
+- Once you believe you know what the faults are, alter those functions
+  and fix those memory leaks.  Save, recompile and rerun - monitoring
+  with top, and also using valgrind again.
+
+- Don't leave that chair until valgrind says there are no memory leaks.
+
+
+An Alternative Way to find Memory Leaks
+=======================================
+
+Some C compilers, like gcc and clang, now come with "sanitizers",
+ways of detecting (usually by extra run-time checks) various
+problems - such as memory leaks, null pointer dereferences, and
+generally undefined behaviour.  In particular the "undefined behaviour
+sanitizer", aka "UBSan", and the "address sanitizer", aka "ASan"
+are of use to us:
+
+To use them, edit the Makefile and change the CC macro to:
+
+CC	=	gcc -fsanitize=undefined -fno-sanitize-recover -fsanitize=address
+
+and then 'make clean all' for a total rebuild.
+
+Then run ./testhash (or ./iterate 1) and you get:
+
+=================================================================
+==3311033==ERROR: LeakSanitizer: detected memory leaks
+
+Direct leak of 260264 byte(s) in 1 object(s) allocated from:
+    #0 0x7f46f1b53602 in malloc (/usr/lib/x86_64-linux-gnu/libasan.so.2+0x98602)
+    #1 0x4015e5 in hashCreate /homes/dcw/docs/talks/c-tools-2020/L2/02.badhash/hash.c:73
+
+Direct leak of 260264 byte(s) in 1 object(s) allocated from:
+    #0 0x7fd379e08602 in malloc (/usr/lib/x86_64-linux-gnu/libasan.so.2+0x98602)
+    #1 0x401a14 in hashCopy /homes/dcw/docs/talks/c-tools-2020/L2/02.badhash/hash.c:112
+    ...
+
+SUMMARY: AddressSanitizer: 520528 byte(s) leaked in 2 allocation(s).
+
+This output is directly analaguous to valgrind's.
